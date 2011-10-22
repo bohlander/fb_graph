@@ -9,9 +9,11 @@ module FbGraph
     end
 
     def fetch(access_token = nil)
-      handle_response do
+      result = handle_response do
         http_client.get @endpoint, build_params(access_token)
       end
+
+      result.blank? ? nil : result["data"]
     end
 
     private
