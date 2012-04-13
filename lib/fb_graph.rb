@@ -1,11 +1,13 @@
 require 'httpclient'
 require 'rack/oauth2'
 require 'patch/rack/oauth2/util'
+require 'patch/rack/oauth2/client'
+require 'patch/rack/oauth2/access_token'
 
 module FbGraph
   VERSION = ::File.read(
     ::File.join(::File.dirname(__FILE__), '../VERSION')
-  )
+  ).delete("\n\r")
   ROOT_URL = "https://graph.facebook.com"
 
   def self.logger
@@ -38,6 +40,19 @@ module FbGraph
     self.debugging = original
   end
   self.debugging = false
+
+  def self.http_client
+    _http_client_ = HTTPClient.new(
+      :agent_name => "FbGraph (#{VERSION})"
+    )
+    _http_client_.request_filter << Debugger::RequestFilter.new if debugging?
+    http_config.try(:call, _http_client_)
+    _http_client_
+  end
+  def self.http_config(&block)
+    Rack::OAuth2.http_config &block unless Rack::OAuth2.http_config
+    @@http_config ||= block
+  end
 end
 
 require 'fb_graph/exception'
@@ -54,6 +69,7 @@ require 'fb_graph/searchable'
 require 'fb_graph/action'
 require 'fb_graph/education'
 require 'fb_graph/location'
+require 'fb_graph/poke'
 require 'fb_graph/privacy'
 require 'fb_graph/subscription'
 require 'fb_graph/targeting'
@@ -61,6 +77,7 @@ require 'fb_graph/venue'
 require 'fb_graph/work'
 
 require 'fb_graph/node'
+require 'fb_graph/open_graph'
 require 'fb_graph/achievement'
 require 'fb_graph/ad_account'
 require 'fb_graph/ad_campaign'
@@ -73,6 +90,7 @@ require 'fb_graph/ad_keyword_suggestion'
 require 'fb_graph/ad_keyword_valid'
 require 'fb_graph/broad_targeting_category'
 require 'fb_graph/reach_estimate.rb'
+require 'fb_graph/ad_preview.rb'
 require 'fb_graph/album'
 require 'fb_graph/app_request'
 require 'fb_graph/application'
@@ -89,16 +107,21 @@ require 'fb_graph/insight'
 require 'fb_graph/link'
 require 'fb_graph/message'
 require 'fb_graph/note'
+require 'fb_graph/notification'
 require 'fb_graph/order'
 require 'fb_graph/page'
 require 'fb_graph/photo'
 require 'fb_graph/place'
 require 'fb_graph/post'
 require 'fb_graph/property'
+require 'fb_graph/question'
+require 'fb_graph/question_option'
 require 'fb_graph/review'
+require 'fb_graph/score'
 require 'fb_graph/status'
 require 'fb_graph/tab'
 require 'fb_graph/tag'
+require 'fb_graph/tagged_object'
 require 'fb_graph/thread'
 require 'fb_graph/user'
 require 'fb_graph/user_achievement'

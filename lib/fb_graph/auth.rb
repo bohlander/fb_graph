@@ -27,7 +27,7 @@ module FbGraph
     def authorize_uri(canvas_uri, options = {})
       endpoint = URI.parse SignedRequest::OAUTH_DIALOG_ENDPOINT
       params = options.merge(
-        :client_id    => self.client.identifier,
+        :client_id    => client.identifier,
         :redirect_uri => canvas_uri
       )
       params[:scope] = Array(params[:scope]).join(',') if params[:scope].present?
@@ -50,17 +50,13 @@ module FbGraph
       self
     end
 
-    def from_session_key(session_key)
-      response = HTTPClient.new.post "#{ROOT_URL}/oauth/exchange_sessions", {:client_id => @client.identifier, :client_secret => @client.secret, :sessions => session_key}
-      if response.body && self.data = JSON.parse(response.body)
-        if self.data[0]
-          self.access_token = build_access_token(self.data[0].with_indifferent_access)
-        else
-          # If the session key is unknown or there's an error, Facebook returns null
-          self.access_token = nil
-        end
-      end
+    def exchange_token!(access_token)
+      raise Unauthorized.new('No Access Token') unless access_token
+      client.fb_exchange_token = access_token
+      self.access_token = client.access_token! :client_auth_body
       self
+    rescue Rack::OAuth2::Client::Error => e
+      raise Exception.new(e.status, e.message)
     end
 
     private
@@ -69,9 +65,11 @@ module FbGraph
       raise Unauthorized.new('No Authorization Code') unless code
       client.redirect_uri = ''
       client.authorization_code = code
-      self.access_token = client.access_token!
+      self.access_token = client.access_token! :client_auth_body
       self.user = User.new(data[:user_id], :access_token => access_token)
       self
+    rescue Rack::OAuth2::Client::Error => e
+      raise Exception.new(e.status, e.message)
     end
 
     def build_access_token(data)

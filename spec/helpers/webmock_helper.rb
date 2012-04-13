@@ -23,16 +23,15 @@ module WebMockHelper
 
   def mock_fql(query, response_file, options = {})
     options.merge!(:params => {
-      :query => query,
-      :format => :json
+      :q => query
     })
-    stub_request(:get, FbGraph::Query::ENDPOINT).with(
+    stub_request(:get, FbGraph::Query.new(query).endpoint).with(
       request_for(:get, options)
     ).to_return(
-      response_for(response_file)
+      response_for(response_file, options)
     )
     res = yield
-    a_request(:get, FbGraph::Query::ENDPOINT).with(
+    a_request(:get, FbGraph::Query.new(query).endpoint).with(
       request_for(:get, options)
     ).should have_been_made.once
     res

@@ -7,9 +7,10 @@ module FbGraph
     attr_accessor :identifier, :endpoint, :access_token
 
     def initialize(identifier, options = {})
-      @identifier   = identifier
-      @endpoint     = File.join(ROOT_URL, identifier.to_s)
-      @access_token = options[:access_token]
+      @identifier         = identifier
+      @endpoint           = File.join(ROOT_URL, identifier.to_s)
+      @access_token       = options[:access_token]
+      @cached_collections = {}
     end
 
     def fetch(options = {})
@@ -24,16 +25,21 @@ module FbGraph
     end
 
     def connection(connection, options = {})
-      collection = options[:cached_collection] || Collection.new(get(options.merge(:connection => connection)))
-      Connection.new(self, connection, options.merge(:collection => collection))
+      Connection.new(
+        self,
+        connection,
+        options.merge(
+          :collection => collection_for(connection, options)
+        )
+      )
     end
 
     def update(options = {})
-      post(options)
+      post options
     end
 
     def destroy(options = {})
-      delete(options)
+      delete options
     end
 
     protected
@@ -59,14 +65,28 @@ module FbGraph
     end
 
     def http_client
-      _http_client_ = HTTPClient.new(
-        :agent_name => "FbGraph (#{VERSION})"
-      )
-      _http_client_.request_filter << Debugger::RequestFilter.new if FbGraph.debugging?
-      _http_client_
+      FbGraph.http_client
     end
 
     private
+
+    def collection_for(connection, options = {})
+      collection = if @cached_collections.has_key?(connection) && options.blank?
+        @cached_collections[connection]
+      else
+        get options.merge(:connection => connection)
+      end
+      Collection.new collection
+    end
+
+    def cache_collections(attributes, *connections)
+      if (attributes.keys - [:access_token]).present?
+        connections.each do |connection|
+          @cached_collections[connection] = attributes[connection]
+        end
+      end
+    end
+    alias_method :cache_collection, :cache_collections
 
     def build_endpoint(params = {})
       File.join([self.endpoint, params.delete(:connection), params.delete(:connection_scope)].compact.collect(&:to_s))
@@ -114,19 +134,16 @@ module FbGraph
       when 'null'
         nil
       else
-        # NOTE: User#app_request! returns ID as a JSON string not as a JSON object..
         if response.body.gsub('"', '').to_i.to_s == response.body.gsub('"', '')
-          return response.body.gsub('"', '')
-        end
-
-        _response_ = JSON.parse(response.body)
-        _response_ = case _response_
-        when Array
-          _response_.map!(&:with_indifferent_access)
-        when Hash
-          _response_ = _response_.with_indifferent_access
-          Exception.handle_httpclient_error(_response_, response.headers) if _response_[:error]
-          _response_
+          # NOTE: User#app_request! returns ID as a JSON string not as a JSON object..
+          response.body.gsub('"', '')
+        else
+          _response_ = JSON.parse(response.body).with_indifferent_access
+          if (200...300).include?(response.status)
+            _response_
+          else
+            Exception.handle_httpclient_error(_response_, response.headers)
+          end
         end
       end
     rescue JSON::ParserError
